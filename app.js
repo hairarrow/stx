@@ -151,7 +151,7 @@ function app() {
       components: {
         $header: $(`<div class=stock__header />`),
         $position: $(`<div class=stock__position />`),
-        $chart: $(`<div class=stock__chart />`),
+        $chart: $(`<canvas class=stock__chart />`),
         $controller: $(`<div class=stock__controller />`),
       },
       modules: {
@@ -208,6 +208,23 @@ function app() {
       }
     }
 
+    const createChart = () => {
+      let ctx = stock.components.$chart[0].getContext('2d');
+      let chart = new Chart(ctx, {
+        type: 'line',
+        options: {},
+        data: {
+          labels: ["Jan", "Feb", "March", "April", "June", "July"],
+          datasets: [{
+            label: "price",
+            data:  [0, 10, 5, 2, 20, 30, 50]
+          }]
+        },
+      });
+    }
+
+    createChart();
+
     stock.components.$header.append(
       stock.modules.$name,
       stock.modules.$price,
@@ -229,8 +246,8 @@ function app() {
 
     stock.$dom.append(
       stock.components.$header,
-      stock.components.$position,
       stock.components.$chart,
+      stock.components.$position,
       stock.components.$controller
     );
 
