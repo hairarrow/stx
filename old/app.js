@@ -13,21 +13,23 @@ const welcomeContainer = `
 
 // Game Class
 // ===============================================
-var testStocks = ['aapl', 'goog', 'fb'];
+var testStocks = ['aapl', 'sq', 'fb'];
 function app() {
   const $app = $(container),
+        defaultTime = 2,
+        defaultCharts = 2,
+        timeOptions = chartQty = [1, 2, 3],
         model = {
-          timeOpt: 1,
-          chartQty: 1,
-          gameSeriesQty: 365,
+          timeOpt: defaultTime,
+          chartQty: defaultCharts,
+          gameSeriesQty: 100,
           balance: 10000,
           equity: 0,
           openP: 0,
           positions: [],
           stocks: [],
           gameSpeed: 1, // lower is faster
-        },
-        timeOptions = chartQty = [1, 2, 3];
+        };
 
   model.getPL = () => model.equity - model.balance;
   model.profits = () => model.equity > 0 ? true : false;
@@ -39,7 +41,12 @@ function app() {
       const $container = $(`<div class=setup__time />`),
             $label = $(`<label />`).text('Time'),
             $c = $(`<select />`);
-      timeOptions.forEach((n) => $c.append($(`<option />`).val(n).text(n)));
+      timeOptions.forEach((n) => {
+        let $opt = $(`<option />`);
+        $opt.val(n).text(n);
+        if (n === defaultTime) $opt.attr('selected', true);
+        $c.append($opt);
+      });
       $c.on('change', (e) => model.timeOpt = $(e.target).val());
       $container.append($label, $c);
       return $container;
@@ -49,7 +56,12 @@ function app() {
       const $container = $(`<div class=setup__charts />`),
             $label = $(`<label />`).text('Charts'),
             $c = $(`<select />`);
-      chartQty.forEach((n) => $c.append($(`<option />`).val(n).text(n)));
+      chartQty.forEach((n) => {
+        let $opt = $(`<option />`);
+        $opt.val(n).text(n) 
+        if (n === defaultCharts) $opt.attr('selected', true);
+        $c.append($opt);
+      });
       $c.on('change', (e) => model.chartQty = $(e.target).val());
       $container.append($label, $c);
       return $container;
@@ -57,7 +69,7 @@ function app() {
 
     const startGameButton = () => {
       const $button = $(`<button />`).text('Start Game');
-      $button.on('click', () => gameEngine(model.timeOpt, model.chartQty));
+      $button.on('click', gameEngine);
       return $button;
     }
 
@@ -96,8 +108,8 @@ function app() {
 
     this.game.components.$header.append(
       this.game.modules.$timer,
+      this.game.modules.$portfolioEquity,
       this.game.modules.$portfolioBalance,
-      this.game.modules.$portfolioEquity
     );
 
     this.game.$dom.append(
@@ -107,8 +119,8 @@ function app() {
 
     this.game.update = () => {
       this.game.modules.$timer.text(model.timer);
-      this.game.modules.$portfolioBalance.text(displayNumber(model.balance));
-      this.game.modules.$portfolioEquity.text(displayNumber(model.equity));
+      this.game.modules.$portfolioBalance.text(displayCurrency(model.balance));
+      this.game.modules.$portfolioEquity.text(displayCurrency(model.equity));
     }
 
     return this.game;
@@ -160,7 +172,7 @@ function app() {
         $price: $(`<div class=stock__price />`),
         $plValue: $(`<div class=stock__pl-value />`),
         $plPercent: $(`<div class=stock__pl-percent />`),
-        $shares: $(`<div class=stock__percent />`),
+        $shares: $(`<div class=stock__shares />`),
         $pps: $(`<div class=stock__pps />`),
         $equity: $(`<div class=stock__equity />`),
         $positionPl: $(`<div class=stock__position-pl />`),
@@ -218,25 +230,29 @@ function app() {
         tooltips: {
           enabled: false,
         },
+        legend: {
+          display: false,
+        },
         scales: {
           xAxes: [{
             display: false,
           }],
-          // yAxes: [{
-            // display: false,
-          // }]
+        },
+        elements: {
+          point: {
+            radius: 0
+          },
         }
       },
       data: {
         labels: stock.model.gameSeries.keys,
         datasets: [{
-          label: 'currentPrice',
           borderColor: 'green',
-          lineTension: 2,
-          hoverRadius: 0,
-          hitRadius: 0,
-          pointStyle: 'line',
-          data: new Array(365)
+          backgroundColor: 'rgba(255, 255, 255, .0)',
+          borderWidth: 2,
+          lineTension: .1,
+          // lineTension: 0,
+          data: new Array(model.gameSeriesQty)
         }]
       },
     });
@@ -245,18 +261,16 @@ function app() {
 
     const updateChart = () => {
       let todayPrice = stock.model.gameSeries.data
-        .map((s) => s['4. close'])[stock.model.day];
-      console.log(stock.model)
-      chart.config.data.datasets[0].data[stock.model.day] = todayPrice;
+            .map((s) => s['4. close'])[stock.model.day],
+          chartData = chart.config.data.datasets[0];
+      console.log(todayPrice);
+      chartData.data[stock.model.day] = todayPrice;
       if (stock.model.pl.value > 0) {
-        chart.config.data.datasets[0].borderColor = 'green';
+        chartData.borderColor = 'green';
       } else {
-        chart.config.data.datasets[0].borderColor = 'red';
+        chartData.borderColor = 'red';
       }
       chart.update();
-      // stock.chart.datasets.forEach((dataset) => {
-        // console.lot(dataset);
-      // });
     }
 
     stock.components.$header.append(
@@ -317,6 +331,7 @@ function app() {
             price: parseFloat(price)
           });
           stock.components.$position.addClass('stock__position--open');
+          stock.modules.$sell.addClass('stock__sell--open');
         }
       } else if (direction === 'sell') {
         if (size > stock.model.position.size ||
@@ -328,6 +343,7 @@ function app() {
           stock.model.position.size -= size;
           stock.model.transactions = [];
           stock.components.$position.removeClass('stock__position--open');
+          stock.modules.$sell.removeClass('stock__sell--open');
         }
       }
     }
@@ -365,27 +381,25 @@ function app() {
       // update components
       updateChart();
       stock.modules.$name.text(stock.name);
-      stock.modules.$price.text(displayNumber(stock.model.price.close));
-      stock.modules.$plValue.text(displayNumber(stock.model.pl.value));
-      stock.modules.$plPercent.text(displayNumber(stock.model.pl.percent));
+      stock.modules.$price.text(displayCurrency(stock.model.price.close));
+      stock.modules.$plValue.text(displayCurrency(stock.model.pl.value));
+      stock.modules.$plPercent.text(displayPercent(stock.model.pl.percent));
       stock.modules.$shares.text(stock.model.position.size);
-      stock.modules.$pps.text(displayNumber(stock.model.position.avgCost));
-      stock.modules.$equity.text(displayNumber(stock.model.position.equity));
-      stock.modules.$positionPl.text(displayNumber(stock.model.position.pl.value));
+      stock.modules.$pps.text(displayCurrency(stock.model.position.avgCost));
+      stock.modules.$equity.text(displayCurrency(stock.model.position.equity));
+      stock.modules.$positionPl.text(displayCurrency(stock.model.position.pl.value));
       stock.modules.$buy.text(
         'Buy ' + stock.model.blockSize
-        + ' @ ' + displayNumber(stock.model.price.close)
+        + ' @ ' + displayCurrency(stock.model.price.close)
       );
       stock.modules.$sell.text(
         'Sell ' + stock.model.position.size
-        + ' @ ' + displayNumber(stock.model.price.close)
+        + ' @ ' + displayCurrency(stock.model.price.close)
       );
       if (stock.model.pl.value > 0) {
-        stock.modules.$plValue.attr('style', 'color: green');
-        stock.modules.$plPercent.attr('style', 'color: green');
+        stock.components.$header.addClass('stock__header--profit');
       } else {
-        stock.modules.$plValue.attr('style', 'color: red');
-        stock.modules.$plPercent.attr('style', 'color: red');
+        stock.components.$header.removeClass('stock__header--profit');
       }
       if (stock.model.position.pl.value > 0) {
         stock.modules.$positionPl.attr('style', 'color: green');
@@ -415,7 +429,7 @@ function app() {
     return stock;
   }
 
-  const gameEngine = (time, nCharts) => {
+  const gameEngine = () => {
     model.timer = model.timeOpt * 60;
     $WelcomeView.detach();
     $GameView = createGameView();
@@ -433,16 +447,17 @@ function app() {
       $GameView.update();
     }, model.gameSpeed * 1000)
   }
-
   let $WelcomeView = WelcomeView(),
       $GameView;
 
   $app.append($WelcomeView);
 
+  // gameEngine();
   return $app;
 }
 
-const displayNumber = (n) => Number(n).toFixed(2);
+const displayPercent = (n) => Number(n).toFixed(2) + '%';
+const displayCurrency = (n) => Number(n).toLocaleString(undefined, {style: 'currency', currency: 'USD'})
 
 const plPercent = (n, o) => {
   if (n >= 0) {
