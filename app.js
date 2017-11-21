@@ -124,7 +124,11 @@ function app() {
           size: 0,
           avgCost: 0,
           pl: 0,
-          equity: 0
+          equity: 0,
+          pl: {
+            value: 0,
+            percent: 0 
+          },
         },
         transactions: [],
         price: {},
@@ -146,6 +150,7 @@ function app() {
       $dom: $(`<div class=stock />`),
       components: {
         $header: $(`<div class=stock__header />`),
+        $position: $(`<div class=stock__position />`),
         $chart: $(`<div class=stock__chart />`),
         $controller: $(`<div class=stock__controller />`),
       },
@@ -154,6 +159,10 @@ function app() {
         $price: $(`<div class=stock__price />`),
         $plValue: $(`<div class=stock__pl-value />`),
         $plPercent: $(`<div class=stock__pl-percent />`),
+        $shares: $(`<div class=stock__percent />`),
+        $pps: $(`<div class=stock__pps />`),
+        $equity: $(`<div class=stock__equity />`),
+        $positionPl: $(`<div class=stock__position-pl />`),
         $buy: $(`<button class=stock__buy type=button />`),
         $sell: $(`<button class=stock__sell type=button />`)
       }
@@ -178,15 +187,24 @@ function app() {
       if (positions.length === 1) {
         return {
           equity: positions[0].size * stock.model.price.close,
-          avgPPS: positions[0].price
+          avgPPS: positions[0].price,
+          originalEquity: positions[0].totalNotional,
+          pl: {
+            value: (stock.model.position.size * stock.model.price.close) - positions[0].totalNotional,
+            percent: plPercent(positions[0].totalNotional, stock.model.position.size * stock.model.price.close)
+          }
         }
       }
-
       let equities = positions.map((s) => s.totalNotional);
       let equity = equities.reduce((a, b) => a + b);
       return {
         equity: stock.model.position.size * stock.model.price.close,
-        avgPPS: equity / stock.model.position.size
+        avgPPS: equity / stock.model.position.size,
+        originalEquity: equity,
+        pl: {
+          value: (stock.model.position.size * stock.model.price.close) - equity,
+          percent: plPercent(equity, stock.model.position.size * stock.model.price.close)
+        }
       }
     }
 
@@ -197,6 +215,13 @@ function app() {
       stock.modules.$plPercent
     );
 
+    stock.components.$position.append(
+      stock.modules.$shares,
+      stock.modules.$pps,
+      stock.modules.$equity,
+      stock.modules.$positionPl
+    );
+
     stock.components.$controller.append(
       stock.modules.$buy,
       stock.modules.$sell,
@@ -204,11 +229,13 @@ function app() {
 
     stock.$dom.append(
       stock.components.$header,
+      stock.components.$position,
       stock.components.$chart,
       stock.components.$controller
     );
 
     stock.modules.$buy.on('click', () => {
+      $GameView.update();
       stock.transaction('buy',
         stock.model.blockSize,
         stock.model.price.close
@@ -216,6 +243,7 @@ function app() {
     });
 
     stock.modules.$sell.on('click', () => {
+      $GameView.update();
       stock.transaction('sell',
         stock.model.position.size,
         stock.model.price.close
@@ -237,6 +265,7 @@ function app() {
             size: size,
             price: parseFloat(price)
           });
+          stock.components.$position.addClass('stock__position--open');
         }
       } else if (direction === 'sell') {
         if (size > stock.model.position.size ||
@@ -247,6 +276,7 @@ function app() {
           stock.holding = false;
           stock.model.position.size -= size;
           stock.model.transactions = [];
+          stock.components.$position.removeClass('stock__position--open');
         }
       }
     }
@@ -254,7 +284,6 @@ function app() {
     stock.update = () => {
       let positionInfo = getPositionInfo(stock.model.transactions);
       let priceData = stock.model.gameSeries.data[stock.model.day];
-
       let price = {
         open: priceData['1. open'],
         high: priceData['2. high'],
@@ -262,7 +291,6 @@ function app() {
         close: priceData['4. close'],
         volume: priceData['5. volume']
       };
-
       let blockSize = Math.floor((model.balance * .1) / price.close);
 
       // update model
@@ -270,8 +298,12 @@ function app() {
       stock.model.pl.value = price.close - stock.model.initialPrice;
       stock.model.pl.percent = plPercent(
         stock.model.pl.value, stock.model.initialPrice);
-      stock.model.position.equity = positionInfo.equity;
-      stock.model.position.avgCost = positionInfo.avgPPS;
+      if (stock.holding) {
+        stock.model.position.equity = positionInfo.equity;
+        stock.model.position.avgCost = positionInfo.avgPPS;
+        stock.model.position.pl.value = positionInfo.pl.value;
+        stock.model.position.pl.percent = positionInfo.pl.percent;
+      }
       if (blockSize === 0 && model.balance > price.close) {
         stock.model.blockSize = 1;
       } else if (blockSize === 0 && model.balance < price.close) {
@@ -279,12 +311,15 @@ function app() {
       } else {
         stock.model.blockSize = blockSize;
       }
-
       // update components
       stock.modules.$name.text(stock.name);
       stock.modules.$price.text(displayNumber(stock.model.price.close));
       stock.modules.$plValue.text(displayNumber(stock.model.pl.value));
       stock.modules.$plPercent.text(displayNumber(stock.model.pl.percent));
+      stock.modules.$shares.text(stock.model.position.size);
+      stock.modules.$pps.text(displayNumber(stock.model.position.avgCost));
+      stock.modules.$equity.text(displayNumber(stock.model.position.equity));
+      stock.modules.$positionPl.text(displayNumber(stock.model.position.pl.value));
       stock.modules.$buy.text(
         'Buy ' + stock.model.blockSize
         + ' @ ' + displayNumber(stock.model.price.close)
@@ -293,7 +328,6 @@ function app() {
         'Sell ' + stock.model.position.size
         + ' @ ' + displayNumber(stock.model.price.close)
       );
-
       if (stock.model.pl.value > 0) {
         stock.modules.$plValue.attr('style', 'color: green');
         stock.modules.$plPercent.attr('style', 'color: green');
@@ -301,7 +335,11 @@ function app() {
         stock.modules.$plValue.attr('style', 'color: red');
         stock.modules.$plPercent.attr('style', 'color: red');
       }
-
+      if (stock.model.position.pl.value > 0) {
+        stock.modules.$positionPl.attr('style', 'color: green');
+      } else {
+        stock.modules.$positionPl.attr('style', 'color: red');
+      }
     }
 
     stock.init = (data) => {
