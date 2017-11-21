@@ -148,10 +148,11 @@ function app() {
         }
       },
       $dom: $(`<div class=stock />`),
+      chart: null,
       components: {
         $header: $(`<div class=stock__header />`),
         $position: $(`<div class=stock__position />`),
-        $chart: $(`<canvas class=stock__chart />`),
+        $chart: $(`<div class=stock__chart />`),
         $controller: $(`<div class=stock__controller />`),
       },
       modules: {
@@ -208,22 +209,55 @@ function app() {
       }
     }
 
-    const createChart = () => {
-      let ctx = stock.components.$chart[0].getContext('2d');
-      let chart = new Chart(ctx, {
-        type: 'line',
-        options: {},
-        data: {
-          labels: ["Jan", "Feb", "March", "April", "June", "July"],
-          datasets: [{
-            label: "price",
-            data:  [0, 10, 5, 2, 20, 30, 50]
-          }]
+    // create chart
+    let canvas = document.createElement('canvas');
+    let ctx = canvas.getContext('2d');
+    let chart = new Chart(ctx, {
+      type: 'line',
+      options: {
+        tooltips: {
+          enabled: false,
         },
-      });
-    }
+        scales: {
+          xAxes: [{
+            display: false,
+          }],
+          // yAxes: [{
+            // display: false,
+          // }]
+        }
+      },
+      data: {
+        labels: stock.model.gameSeries.keys,
+        datasets: [{
+          label: 'currentPrice',
+          borderColor: 'green',
+          lineTension: 2,
+          hoverRadius: 0,
+          hitRadius: 0,
+          pointStyle: 'line',
+          data: new Array(365)
+        }]
+      },
+    });
 
-    createChart();
+    stock.components.$chart.append(canvas);
+
+    const updateChart = () => {
+      let todayPrice = stock.model.gameSeries.data
+        .map((s) => s['4. close'])[stock.model.day];
+      console.log(stock.model)
+      chart.config.data.datasets[0].data[stock.model.day] = todayPrice;
+      if (stock.model.pl.value > 0) {
+        chart.config.data.datasets[0].borderColor = 'green';
+      } else {
+        chart.config.data.datasets[0].borderColor = 'red';
+      }
+      chart.update();
+      // stock.chart.datasets.forEach((dataset) => {
+        // console.lot(dataset);
+      // });
+    }
 
     stock.components.$header.append(
       stock.modules.$name,
@@ -308,7 +342,7 @@ function app() {
         close: priceData['4. close'],
         volume: priceData['5. volume']
       };
-      let blockSize = Math.floor((model.balance * .1) / price.close);
+      let blockSize = Math.floor((model.balance * .25) / price.close);
 
       // update model
       stock.model.price = price;
@@ -329,6 +363,7 @@ function app() {
         stock.model.blockSize = blockSize;
       }
       // update components
+      updateChart();
       stock.modules.$name.text(stock.name);
       stock.modules.$price.text(displayNumber(stock.model.price.close));
       stock.modules.$plValue.text(displayNumber(stock.model.pl.value));
